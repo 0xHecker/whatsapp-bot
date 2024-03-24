@@ -1,15 +1,15 @@
 const express = require('express');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, RemoteAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const cron = require('node-cron');
+const { MongoStore } = require('wwebjs-mongo');
+const mongoose = require('mongoose');
 
 const app = express();
 app.use(express.json());
 
-const client = new Client({
-  puppeteer: { headless: true },
-  authStrategy: new LocalAuth(),
-});
+require('dotenv').config()
+const uri = process.env.MONGO_URI;
 
 const allowedGroups = {
   '120363169385830766@g.us': {
@@ -22,70 +22,66 @@ const allowedGroups = {
     welcomeMessage: 'Welcome to Telugollu! Let us know about you.',
     messageCounts: {}
   },
+
 };
 
+let client;
 
-const messageCounts = {};
+mongoose.connect(uri).then(() => {
+  console.log('Connected to MongoDB');
+  const store = new MongoStore({ mongoose: mongoose });
+  client = new Client({
+    authStrategy: new RemoteAuth({
+      store: store,
+      backupSyncIntervalMs: 300000
+    })
+  });
 
-client.on('qr', (qr) => {
-  console.log('QR RECEIVED', qr);
-  qrcode.generate(qr, { small: true });
+  client.on('qr', (qr) => {
+    console.log('QR RECEIVED', qr);
+    qrcode.generate(qr, { small: true });
+  });
+
+  client.on('ready', async () => {
+    console.log('Client is ready!');
+  });
+
+  client.on('message', async (msg) => {
+    console.log(msg._data.notifyName || msg._data.author.split('@')[0]);
+    if (!allowedGroups[msg.from]) return;
+    const senderId = msg._data.notifyName || msg._data.author.split('@')[0];
+    const group = allowedGroups[msg.from];
+    if (group.messageCounts[senderId]) {
+      group.messageCounts[senderId]++;
+    } else {
+      group.messageCounts[senderId] = 1;
+    }
+    console.log(group.messageCounts);
+  });
+
+  client.on('group_join', async (notification) => {
+    const groupId = notification.id.remote;
+    const participantId = notification.id.participant;
+    console.log("groupId", groupId);
+    console.log("participantId", participantId);
+
+    if (!allowedGroups[groupId]) return;
+    sendDailyStats()
+    const chat = await client.getChatById(groupId);
+    console.log('chat', chat);
+
+    const participantContact = await client.getContactById(participantId);
+    const messageText = allowedGroups[groupId].welcomeMessage.replace('{{name}}', participantContact.pushname || participantId.split('@')[0]);
+
+    console.log("participantContact", participantContact);
+    await client.sendMessage(groupId, messageText, { mentions: [participantId] });
+  });
+
+  client.initialize();
+
+}).catch((err) => {
+  console.log('Error connecting to MongoDB', err);
 });
-
-client.on('ready', () => {
-  console.log('Client is ready!');
-});
-
-client.on('message', async (msg) => {
-  console.log(msg._data.notifyName || msg._data.author.split('@')[0]);
-  if (!allowedGroups[msg.from]) return;
-  const senderId = msg._data.notifyName || msg._data.author.split('@')[0];
-  const group = allowedGroups[msg.from];
-  if (group.messageCounts[senderId]) {
-    group.messageCounts[senderId]++;
-  } else {
-    group.messageCounts[senderId] = 1;
-  }
-  console.log(group.messageCounts);
-});
-
-client.on('group_join', async (notification) => {
-  const groupId = notification.id.remote;
-  const participantId = notification.id.participant;
-  console.log("groupId", groupId);
-  console.log("participantId", participantId);
-
-  if (!allowedGroups[groupId]) return;
-  sendDailyStats()
-  const chat = await client.getChatById(groupId);
-  console.log('chat', chat);
-
-  const participantContact = await client.getContactById(participantId);
-  const messageText = allowedGroups[groupId].welcomeMessage.replace('{{name}}', participantContact.pushname || participantId.split('@')[0]);
-
-  console.log("participantContact", participantContact);
-  await client.sendMessage(groupId, messageText, { mentions: [participantId] });
-});
-
-/**
- GroupNotification {
-  id: {
-    fromMe: false,
-    remote: '1xxxxx989389@g.us',
-    id: '23xxxxx11260445',
-    participant: '9xxxx87@c.us',
-    _serialized: 'false_120xxxx389@g.us_231169xxxx916260121987@c.us'
-  },
-  body: '',
-  type: 'invite',
-  timestamp: 1711260445,
-  chatId: '120xxxx9389@g.us',
-  author: undefined,
-  recipientIds: [ '91xxxxx987@c.us' ]
-}
- */
-
-client.initialize();
 
 function sendDailyStats() {
   Object.keys(allowedGroups).forEach(async (groupId) => {
@@ -107,11 +103,58 @@ function sendDailyStats() {
   });
 }
 
+
 cron.schedule('59 23 * * *', sendDailyStats);
+
 
 app.listen(3000, () => {
   console.log('Server is running on port 3000');
 });
+
+/**
+ GroupNotification {
+  id: {
+    fromMe: false,
+    remote: '1xxxxx989389@g.us',
+    id: '23xxxxx11260445',
+    participant: '9xxxx87@c.us',
+    _serialized: 'false_120xxxx389@g.us_231169xxxx916260121987@c.us'
+  },
+  body: '',
+  type: 'invite',
+  timestamp: 1711260445,
+  chatId: '120xxxx9389@g.us',
+  author: undefined,
+  recipientIds: [ '91xxxxx987@c.us' ]
+}
+ */
+
+
+// async function run() {
+//   try {
+//     await mongo_client.connect();
+//     await mongo_client.db("admin").command({ ping: 1 });
+//     console.log("Pinged your deployment. You successfully connected to MongoDB!");
+//   } finally {
+//     await mongo_client.close();
+//   }
+// }
+
+// run().catch(console.dir);
+
+// const store = new MongoStore({ mongoose: mongo_client });
+// const client = new Client({
+//   authStrategy: new RemoteAuth({
+//     store: store,
+//     backupSyncIntervalMs: 300000
+//   })
+// });
+
+// const client = new Client({
+//   puppeteer: { headless: true },
+//   authStrategy: new LocalAuth(),
+// });
+
 
 /*
 {
