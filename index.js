@@ -22,7 +22,11 @@ const allowedGroups = {
     welcomeMessage: 'Welcome to Telugollu! Let us know about you.',
     messageCounts: {}
   },
-
+  '120363255388643681@g.us': {
+    name: 'Test group',
+    welcomeMessage: 'Welcome {{name}} to the test group!',
+    messageCounts: {}
+  },
 };
 
 let client;
@@ -66,7 +70,7 @@ mongoose.connect(uri).then(() => {
     console.log("participantId", participantId);
 
     if (!allowedGroups[groupId]) return;
-    sendDailyStats()
+
     const chat = await client.getChatById(groupId);
     console.log('chat', chat);
 
@@ -74,6 +78,7 @@ mongoose.connect(uri).then(() => {
     const messageText = allowedGroups[groupId].welcomeMessage.replace('{{name}}', participantContact.pushname || participantId.split('@')[0]);
 
     console.log("participantContact", participantContact);
+    console.log("messageText", messageText);
     await client.sendMessage(groupId, messageText, { mentions: [participantId] });
   });
 
@@ -85,20 +90,24 @@ mongoose.connect(uri).then(() => {
 
 function sendDailyStats() {
   Object.keys(allowedGroups).forEach(async (groupId) => {
-    let statsMessage = 'Today\'s Wrap:\n\n';
+    let statsMessage = 'Today\'s Leaderboard:\n\n';
+    let totalCount = 0;
     const group = allowedGroups[groupId];
     const sortedNames = Object.keys(group.messageCounts).sort((a, b) => group.messageCounts[b] - group.messageCounts[a]);
     console.log("sortedNames", sortedNames);
     for (const name of sortedNames) {
       const count = group.messageCounts[name];
+      totalCount += count;
       statsMessage += `${name}: ${count}\n`;
     }
+
+    statsMessage += `\n\nTotal Messages Today: ${totalCount}`;
 
     await client.sendMessage(groupId, statsMessage);
 
     // Reset counts for the next day
-    Object.keys(messageCounts).forEach((key) => {
-      messageCounts[key] = 0;
+    Object.keys(group.messageCounts).forEach((key) => {
+      group.messageCounts[key] = 0;
     });
   });
 }
@@ -253,6 +262,5 @@ app.listen(3000, () => {
   isEphemeral: undefined,
   links: []
 }
-
 
 */
