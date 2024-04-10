@@ -4,7 +4,15 @@ const qrcode = require('qrcode-terminal');
 const cron = require('node-cron');
 const { MongoStore } = require('wwebjs-mongo');
 const mongoose = require('mongoose');
+const puppeteer = require('puppeteer');
 
+(async () => {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  await page.goto('https://example.com');
+  await page.screenshot({ path: 'example.png' });
+  await browser.close();
+})();
 const app = express();
 app.use(express.json());
 
@@ -54,6 +62,10 @@ mongoose.connect(uri).then(() => {
 
   client.on('ready', async () => {
     console.log('Client is ready!');
+  });
+
+  client.on('debug', (debug) => {
+    console.log(debug);
   });
 
   client.on('message', async (msg) => {
