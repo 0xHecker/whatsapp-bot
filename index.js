@@ -46,6 +46,8 @@ mongoose.connect(uri).then(() => {
     },
   });
 
+  console.log("client", client);
+
   client.on('qr', (qr) => {
     console.log("inside qr");
     console.log('QR RECEIVED', qr);
