@@ -19,7 +19,7 @@ const allowedGroups = {
   },
   '120363200819647560@g.us': {
     name: 'Telugollu తెలుగు',
-    welcomeMessage: 'Welcome to Telugollu! Let us know about you.',
+    welcomeMessage: 'Hi {{name}}, welcome to the group! Intro ichukondi',
     messageCounts: {}
   },
   '120363255388643681@g.us': {
@@ -38,7 +38,12 @@ mongoose.connect(uri).then(() => {
     authStrategy: new RemoteAuth({
       store: store,
       backupSyncIntervalMs: 300000
-    })
+    }),
+    webVersionCache: {
+      type: "remote",
+      remotePath:
+        "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html",
+    },
   });
 
   client.on('qr', (qr) => {
@@ -112,9 +117,7 @@ function sendDailyStats() {
   });
 }
 
-
-cron.schedule('59 23 * * *', sendDailyStats);
-
+cron.schedule('29 18 * * *', sendDailyStats); // 11:59 PM IST
 
 app.listen(3000, () => {
   console.log('Server is running on port 3000');
